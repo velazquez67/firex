@@ -9,6 +9,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.TreeMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import com.google.api.gax.core.CredentialsProvider;
 import com.google.api.gax.core.FixedCredentialsProvider;
 import com.google.appengine.api.blobstore.BlobKey;
@@ -47,10 +50,58 @@ public class Principal
 		Principal p = new Principal();
 		System.out.println("inicia");
 		p.conectar(new RegistroFirebase().tecZacatepec(), "teczacatepec");
-		p.cambiaClavesHorarios("20251", "ACF0901", "ACF-2301");
+		p.generaAccesos();
 		System.out.println("fin");
 	}
 
+	@SuppressWarnings("unchecked")
+	public void generaAccesos() throws Exception
+	{
+		DocumentReference doc;
+		Map<String, Object> dataE, dataU;
+		CollectionReference colU = f.collection("itz/tecnamex/usuarios");
+		CollectionReference col = f.collection("itz/tecnamex/estudiantes");
+		Iterator<QueryDocumentSnapshot> l = col.whereGreaterThan("correo", " ")
+				.get().get().iterator();
+		String correo;
+		ArrayList<String> m;
+		boolean graba;
+		while (l.hasNext())
+		{
+			dataE = l.next().getData();
+			doc = colU.document(dataE.get("control").toString());
+			if (doc.get().get().exists())
+			{
+				dataU = doc.get().get().getData();
+				System.out.println(dataE.get("control"));
+				correo = (String) dataE.get("correoInstitucional");
+				graba = false;
+				m = (ArrayList<String>) dataU.get("accesos");
+				if(m==null)
+					{ m=new ArrayList<String>();
+					  graba=true;
+					}
+				if (correo != null && correo.length() > 5 && correo.contains("@")
+						&& !m.contains(correo.toLowerCase()))
+				{
+					m.add(correo.toLowerCase());
+					graba = true;
+				}
+				correo = (String) dataE.get("correo");
+				if (correo != null && correo.length() > 5 && correo.contains("@")
+						&& !m.contains(correo.toLowerCase()))
+				{
+					m.add(correo.toLowerCase());
+					graba = true;
+				}
+				if (graba)
+				{
+					doc.update("accesos", m).get();
+				}
+			}
+		}
+	}
+	
 	@SuppressWarnings("unchecked")
 	public void cambiaClavesHorarios(String periodo, String materiaOld,
 			String materiaNew) throws Exception
@@ -65,16 +116,16 @@ public class Principal
 			if (data.get("#" + materiaOld) != null)
 			{
 				mat = (Map<String, Object>) data.get("#" + materiaOld);
-				
+
 				data.remove("#" + materiaOld);
 				System.out.println(data);
-//				mat.put("claveMateria", materiaNew);
-//				mat.put("idGrupo", periodo + "|" + materiaNew + "|" + mat.get("grupo"));
-//				data.put("#" + materiaNew, mat);
-//				System.out.println(data);
+				mat.put("claveMateria", materiaNew);
+				mat.put("idGrupo", periodo + "|" + materiaNew + "|" + mat.get("grupo"));
+				data.put("#" + materiaNew, mat);
+				System.out.println(data);
 				DocumentReference doc = l.get(x).getReference();
 				doc.set(data).get();
-				
+
 			}
 		}
 	}
@@ -109,10 +160,12 @@ public class Principal
 			doc.set(data).get();
 			System.out.println(data.get("id").toString());
 
-			CollectionReference colEOld = f.collection("itz/tecnamex/grupos/" + periodo + "|"
-					+ materiaOld + "|" + data.get("grupo") + "/estudiantes");
-			CollectionReference colENew = f.collection("itz/tecnamex/grupos/" + periodo + "|"
-					+ materiaNew + "|" + data.get("grupo") + "/estudiantes");
+			CollectionReference colEOld = f
+					.collection("itz/tecnamex/grupos/" + periodo + "|" + materiaOld + "|"
+							+ data.get("grupo") + "/estudiantes");
+			CollectionReference colENew = f
+					.collection("itz/tecnamex/grupos/" + periodo + "|" + materiaNew + "|"
+							+ data.get("grupo") + "/estudiantes");
 			List<QueryDocumentSnapshot> ests = colEOld.get().get().getDocuments();
 			for (int w = 0; w < ests.size(); w++)
 			{
