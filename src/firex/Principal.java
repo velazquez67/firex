@@ -9,9 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.TreeMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import com.google.api.gax.core.CredentialsProvider;
 import com.google.api.gax.core.FixedCredentialsProvider;
 import com.google.appengine.api.blobstore.BlobKey;
@@ -50,58 +47,109 @@ public class Principal
 		Principal p = new Principal();
 		System.out.println("inicia");
 		p.conectar(new RegistroFirebase().tecZacatepec(), "teczacatepec");
-		p.generaAccesos();
+		p.actualizaInscritos("20251");
 		System.out.println("fin");
 	}
+	
+	public void actualizaInscritos(String periodo) throws Exception
+	{
+		CollectionReference col = f.collection("itz/tecnamex/grupos");
+		Iterator<QueryDocumentSnapshot> i = col.whereEqualTo("periodo",periodo).
+				get().get().iterator();
+		DocumentReference doc;
+		int x;
+		while (i.hasNext())
+		{
+			doc = i.next().getReference();
+			try
+			{
+				x = f.collection("itz/tecnamex/grupos/" + doc.getId() + "/estudiantes")
+						.get().get().getDocuments().size();
+			} catch (Exception error)
+			{
+				x = 0;
+			}
+			doc.update("inscritos", x).get();
+			System.out.println(doc.getId());
+		}
+
+	}
+
+	
+
 
 	@SuppressWarnings("unchecked")
+	public void accesos() throws Exception
+	{
+		CollectionReference colH = f.collection("itz/tecnamex/horarios");
+		Iterator<QueryDocumentSnapshot> l = colH.whereEqualTo("periodo","20251").get().get().iterator();
+		Map<String, Object> data;
+		DocumentReference doc;
+		CollectionReference col = f.collection("itz/tecnamex/usuarios");
+		ArrayList<String> m;
+		String nombre;
+		while (l.hasNext())
+		{
+			doc = l.next().getReference();
+			data = doc.get().get().getData();
+			nombre = (String) data.get("control");
+			System.out.println(nombre);
+			if (nombre.charAt(0) == 'C')
+			{ doc = col.document(nombre);
+			  data = doc.get().get().getData();
+				m = (ArrayList<String>) data.get("accesos");
+				if (m != null && !m.contains(nombre))
+				{
+					m.add(nombre);
+					doc.update("accesos", m).get();
+					System.out.println(data.get("nombre") + " " + m.get(0));
+				}
+
+			}
+		}
+	}
+
+	public void permisos() throws Exception
+	{
+		UserRecord u = auth.getUserByEmail("marco.vv@zacatepec.tecnm.mx");
+		Map<String, Object> p = u.getCustomClaims();
+		System.out.println(p);
+		System.out.println(u.getEmail());
+		HashMap<String, Object> h = new HashMap<String, Object>(p);
+		h.put("Docente", true);
+		h.put("Administrador", true);
+		auth.setCustomUserClaims(u.getUid(), h);
+	}
+
 	public void generaAccesos() throws Exception
 	{
 		DocumentReference doc;
 		Map<String, Object> dataE, dataU;
 		CollectionReference colU = f.collection("itz/tecnamex/usuarios");
-		CollectionReference col = f.collection("itz/tecnamex/estudiantes");
-		Iterator<QueryDocumentSnapshot> l = col.whereGreaterThan("correo", " ")
-				.get().get().iterator();
+		CollectionReference col = f.collection("itz/tecnamex/empleados");
+		Iterator<QueryDocumentSnapshot> l = col.get().get().iterator();
 		String correo;
 		ArrayList<String> m;
-		boolean graba;
 		while (l.hasNext())
 		{
 			dataE = l.next().getData();
-			doc = colU.document(dataE.get("control").toString());
+			doc = colU.document(dataE.get("rfc").toString());
 			if (doc.get().get().exists())
 			{
 				dataU = doc.get().get().getData();
-				System.out.println(dataE.get("control"));
+				System.out.println(dataE.get("rfc"));
+				m = new ArrayList<String>();
 				correo = (String) dataE.get("correoInstitucional");
-				graba = false;
-				m = (ArrayList<String>) dataU.get("accesos");
-				if(m==null)
-					{ m=new ArrayList<String>();
-					  graba=true;
-					}
-				if (correo != null && correo.length() > 5 && correo.contains("@")
-						&& !m.contains(correo.toLowerCase()))
-				{
+				if (correo != null && correo.length() > 5 && correo.contains("@"))
 					m.add(correo.toLowerCase());
-					graba = true;
-				}
-				correo = (String) dataE.get("correo");
-				if (correo != null && correo.length() > 5 && correo.contains("@")
-						&& !m.contains(correo.toLowerCase()))
-				{
-					m.add(correo.toLowerCase());
-					graba = true;
-				}
-				if (graba)
-				{
-					doc.update("accesos", m).get();
-				}
+				m.add((String) dataU.get("nombre"));
+				doc.update("accesos", m);
+
 			}
+
 		}
 	}
-	
+
 	@SuppressWarnings("unchecked")
 	public void cambiaClavesHorarios(String periodo, String materiaOld,
 			String materiaNew) throws Exception
@@ -427,29 +475,6 @@ public class Principal
 			System.out.println(a[3]);
 		}
 		arch.close();
-
-	}
-
-	public void actualizaInscritos() throws Exception
-	{
-		CollectionReference col = f.collection("itz/tecnamex/grupos");
-		Iterator<QueryDocumentSnapshot> i = col.get().get().iterator();
-		DocumentReference doc;
-		int x;
-		while (i.hasNext())
-		{
-			doc = i.next().getReference();
-			try
-			{
-				x = f.collection("itz/tecnamex/grupos/" + doc.getId() + "/estudiantes")
-						.get().get().getDocuments().size();
-			} catch (Exception error)
-			{
-				x = 0;
-			}
-			doc.update("inscritos", x).get();
-			System.out.println(doc.getId());
-		}
 
 	}
 
@@ -1008,16 +1033,6 @@ public class Principal
 			}
 		}
 
-	}
-
-	public void permisos() throws Exception
-	{
-		UserRecord u = auth.getUserByEmail("evm670113pva@tecnamex.com");
-		Map<String, Object> p = u.getCustomClaims();
-		System.out.println(p);
-		System.out.println(u.getEmail());
-		// h.put("usuario", "Docente");
-		// auth.setCustomUserClaims(u.getUid(), h);
 	}
 
 	public void palabras() throws Exception
